@@ -7,9 +7,6 @@ import LetterCard from './components/LetterCard';
 import SparkyMascot from './components/SparkyMascot';
 import { decode, decodeAudioData, createPcmBlob } from './services/audioUtils';
 
-// aistudio types are assumed to be provided by the environment, 
-// removing manual declaration to avoid conflict with existing global AIStudio type.
-
 const App: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPracticing, setIsPracticing] = useState(false);
@@ -47,13 +44,16 @@ const App: React.FC = () => {
   }, []);
 
   const ensureApiKey = async () => {
-    // Relying on global aistudio provided by environment
     const aiStudio = (window as any).aistudio;
     if (aiStudio) {
-      const hasKey = await aiStudio.hasSelectedApiKey();
-      if (!hasKey) {
-        await aiStudio.openSelectKey();
-        // Proceeding assuming selection was successful per race condition guidelines
+      try {
+        const hasKey = await aiStudio.hasSelectedApiKey();
+        if (!hasKey) {
+          await aiStudio.openSelectKey();
+          // Per instructions: assume success after triggering openSelectKey
+        }
+      } catch (e) {
+        console.error("API Key selection handling failed:", e);
       }
     }
   };
@@ -62,7 +62,8 @@ const App: React.FC = () => {
     await ensureApiKey();
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      // Create fresh instance before each call as required
+      const ai = new GoogleGenAI({ apiKey: (process.env as any).API_KEY });
       const promptText = `The child is learning the letter ${currentData.letter}. Say the phonic sound for ${currentData.letter} clearly. For example, '${currentData.phonic}'. Then say the word '${currentData.word}'. Keep it short and sweet for a toddler.`;
       
       const response = await ai.models.generateContent({
@@ -110,7 +111,7 @@ const App: React.FC = () => {
       setIsListening(true);
       setMessage(`Sparky is listening! Say '${currentData.phonic}' like in '${currentData.word}'...`);
 
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: (process.env as any).API_KEY });
       inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       
@@ -127,6 +128,7 @@ const App: React.FC = () => {
             scriptProcessor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
               const pcmBlob = createPcmBlob(inputData);
+              // Use sessionPromise directly to avoid race conditions
               sessionPromise.then((session) => {
                 session.sendRealtimeInput({ media: pcmBlob });
               });
@@ -136,7 +138,7 @@ const App: React.FC = () => {
             scriptProcessor.connect(inputAudioContextRef.current!.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
-            const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+            const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio && outputAudioContextRef.current) {
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputAudioContextRef.current.currentTime);
               const buffer = await decodeAudioData(decode(base64Audio), outputAudioContextRef.current, 24000, 1);
@@ -146,7 +148,6 @@ const App: React.FC = () => {
               source.addEventListener('ended', () => activeSourcesRef.current.delete(source));
               source.start(nextStartTimeRef.current);
               nextStartTimeRef.current += buffer.duration;
-              // Fixed: accessing current property of activeSourcesRef (useRef)
               activeSourcesRef.current.add(source);
             }
 
