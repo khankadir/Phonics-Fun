@@ -1,11 +1,14 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { GoogleGenAI, LiveServerMessage } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { PHONICS_DATA } from './constants';
 import { PhonicData } from './types';
 import LetterCard from './components/LetterCard';
 import SparkyMascot from './components/SparkyMascot';
 import { decode, decodeAudioData, createPcmBlob } from './services/audioUtils';
+
+// aistudio types are assumed to be provided by the environment, 
+// removing manual declaration to avoid conflict with existing global AIStudio type.
 
 const App: React.FC = () => {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -43,15 +46,20 @@ const App: React.FC = () => {
     nextStartTimeRef.current = 0;
   }, []);
 
-  const handleHearSound = async () => {
-    // Check for API key if required
-    if (!(window as any).aistudio?.hasSelectedApiKey && !(window as any).aistudio?.hasSelectedApiKey()) {
-      try {
-        await (window as any).aistudio?.openSelectKey();
-      } catch (e) {
-        console.warn("API Key dialog failed, attempting to continue anyway...");
+  const ensureApiKey = async () => {
+    // Relying on global aistudio provided by environment
+    const aiStudio = (window as any).aistudio;
+    if (aiStudio) {
+      const hasKey = await aiStudio.hasSelectedApiKey();
+      if (!hasKey) {
+        await aiStudio.openSelectKey();
+        // Proceeding assuming selection was successful per race condition guidelines
       }
     }
+  };
+
+  const handleHearSound = async () => {
+    await ensureApiKey();
 
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -61,7 +69,7 @@ const App: React.FC = () => {
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text: promptText }] }],
         config: {
-          responseModalities: ['AUDIO'] as any, // Use string for better ESM compatibility
+          responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: {
               prebuiltVoiceConfig: { voiceName: 'Kore' },
@@ -70,7 +78,7 @@ const App: React.FC = () => {
         },
       });
 
-      const base64Audio = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (base64Audio) {
         const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         const buffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1);
@@ -80,20 +88,22 @@ const App: React.FC = () => {
         source.start();
         setMessage(`Listen carefully to the sound of ${currentData.letter}!`);
       } else {
-        throw new Error("No audio data in response");
+        throw new Error("No audio data found in response");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("TTS Error details:", error);
-      setMessage("Oh no! My voice box is tickly. Let's try again!");
+      if (error.message?.includes("Requested entity was not found")) {
+        setMessage("I couldn't find my voice model. Please try selecting your API key again!");
+        const aiStudio = (window as any).aistudio;
+        if (aiStudio) await aiStudio.openSelectKey();
+      } else {
+        setMessage("Oh no! Sparky's voice is missing. Let's try again!");
+      }
     }
   };
 
   const startPractice = async () => {
-    if (!(window as any).aistudio?.hasSelectedApiKey && !(window as any).aistudio?.hasSelectedApiKey()) {
-      try {
-        await (window as any).aistudio?.openSelectKey();
-      } catch (e) {}
-    }
+    await ensureApiKey();
 
     try {
       setIsPracticing(true);
@@ -117,7 +127,6 @@ const App: React.FC = () => {
             scriptProcessor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
               const pcmBlob = createPcmBlob(inputData);
-              // CRITICAL: Always use the promise to send input to avoid race conditions
               sessionPromise.then((session) => {
                 session.sendRealtimeInput({ media: pcmBlob });
               });
@@ -137,6 +146,7 @@ const App: React.FC = () => {
               source.addEventListener('ended', () => activeSourcesRef.current.delete(source));
               source.start(nextStartTimeRef.current);
               nextStartTimeRef.current += buffer.duration;
+              // Fixed: accessing current property of activeSourcesRef (useRef)
               activeSourcesRef.current.add(source);
             }
 
@@ -155,7 +165,7 @@ const App: React.FC = () => {
           onclose: () => stopPractice(),
         },
         config: {
-          responseModalities: ['AUDIO'] as any,
+          responseModalities: [Modality.AUDIO],
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
           },
@@ -173,7 +183,7 @@ const App: React.FC = () => {
     } catch (err) {
       console.error("Session failed:", err);
       stopPractice();
-      setMessage("Oops! Sparky's ears are a bit sleepy. Check your microphone!");
+      setMessage("Oops! My ears are sleepy. Please check your mic!");
     }
   };
 
