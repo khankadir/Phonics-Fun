@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { GoogleGenAI, Modality, LiveServerMessage } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage } from '@google/genai';
 import { PHONICS_DATA } from './constants';
 import { PhonicData } from './types';
 import LetterCard from './components/LetterCard';
@@ -29,37 +29,48 @@ const App: React.FC = () => {
       streamRef.current = null;
     }
     if (inputAudioContextRef.current) {
-      inputAudioContextRef.current.close();
+      inputAudioContextRef.current.close().catch(() => {});
       inputAudioContextRef.current = null;
     }
     if (outputAudioContextRef.current) {
-      outputAudioContextRef.current.close();
+      outputAudioContextRef.current.close().catch(() => {});
       outputAudioContextRef.current = null;
     }
-    activeSourcesRef.current.forEach(source => source.stop());
+    activeSourcesRef.current.forEach(source => {
+      try { source.stop(); } catch (e) {}
+    });
     activeSourcesRef.current.clear();
     nextStartTimeRef.current = 0;
   }, []);
 
   const handleHearSound = async () => {
+    // Check for API key if required
+    if (!(window as any).aistudio?.hasSelectedApiKey && !(window as any).aistudio?.hasSelectedApiKey()) {
+      try {
+        await (window as any).aistudio?.openSelectKey();
+      } catch (e) {
+        console.warn("API Key dialog failed, attempting to continue anyway...");
+      }
+    }
+
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const prompt = `The child is learning the letter ${currentData.letter}. Say the phonic sound for ${currentData.letter} clearly. For example, '${currentData.phonic}'. Then say the word '${currentData.word}'. Keep it short and sweet for a toddler.`;
+      const promptText = `The child is learning the letter ${currentData.letter}. Say the phonic sound for ${currentData.letter} clearly. For example, '${currentData.phonic}'. Then say the word '${currentData.word}'. Keep it short and sweet for a toddler.`;
       
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{ parts: [{ text: promptText }] }],
         config: {
-          responseModalities: [Modality.AUDIO],
+          responseModalities: ['AUDIO'] as any, // Use string for better ESM compatibility
           speechConfig: {
             voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: 'Kore' }, // Friendly female voice
+              prebuiltVoiceConfig: { voiceName: 'Kore' },
             },
           },
         },
       });
 
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      const base64Audio = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
       if (base64Audio) {
         const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         const buffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1);
@@ -68,14 +79,22 @@ const App: React.FC = () => {
         source.connect(ctx.destination);
         source.start();
         setMessage(`Listen carefully to the sound of ${currentData.letter}!`);
+      } else {
+        throw new Error("No audio data in response");
       }
     } catch (error) {
-      console.error("TTS Error:", error);
+      console.error("TTS Error details:", error);
       setMessage("Oh no! My voice box is tickly. Let's try again!");
     }
   };
 
   const startPractice = async () => {
+    if (!(window as any).aistudio?.hasSelectedApiKey && !(window as any).aistudio?.hasSelectedApiKey()) {
+      try {
+        await (window as any).aistudio?.openSelectKey();
+      } catch (e) {}
+    }
+
     try {
       setIsPracticing(true);
       setIsListening(true);
@@ -96,11 +115,12 @@ const App: React.FC = () => {
             const scriptProcessor = inputAudioContextRef.current!.createScriptProcessor(4096, 1, 1);
             
             scriptProcessor.onaudioprocess = (e) => {
-              if (sessionRef.current) {
-                const inputData = e.inputBuffer.getChannelData(0);
-                const pcmBlob = createPcmBlob(inputData);
-                sessionRef.current.sendRealtimeInput({ media: pcmBlob });
-              }
+              const inputData = e.inputBuffer.getChannelData(0);
+              const pcmBlob = createPcmBlob(inputData);
+              // CRITICAL: Always use the promise to send input to avoid race conditions
+              sessionPromise.then((session) => {
+                session.sendRealtimeInput({ media: pcmBlob });
+              });
             };
             
             source.connect(scriptProcessor);
@@ -121,7 +141,9 @@ const App: React.FC = () => {
             }
 
             if (message.serverContent?.interrupted) {
-              activeSourcesRef.current.forEach(s => s.stop());
+              activeSourcesRef.current.forEach(s => {
+                try { s.stop(); } catch (e) {}
+              });
               activeSourcesRef.current.clear();
               nextStartTimeRef.current = 0;
             }
@@ -133,7 +155,7 @@ const App: React.FC = () => {
           onclose: () => stopPractice(),
         },
         config: {
-          responseModalities: [Modality.AUDIO],
+          responseModalities: ['AUDIO'] as any,
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
           },
@@ -160,7 +182,7 @@ const App: React.FC = () => {
     setIsListening(false);
     setMessage("Good job! You did great! Want to try another letter?");
     if (sessionRef.current) {
-      sessionRef.current.close();
+      try { sessionRef.current.close(); } catch (e) {}
       sessionRef.current = null;
     }
     cleanupAudio();
@@ -181,8 +203,7 @@ const App: React.FC = () => {
   }, [cleanupAudio]);
 
   return (
-    <div className="min-h-screen pb-12 flex flex-col items-center">
-      {/* Header */}
+    <div className="min-h-screen pb-24 flex flex-col items-center">
       <header className="w-full bg-white shadow-sm p-4 flex justify-between items-center mb-8">
         <h1 className="text-3xl font-kids text-blue-600 tracking-tight">
           Phonics <span className="text-pink-500">Fun</span>
@@ -196,10 +217,8 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="flex-1 flex flex-col items-center justify-center w-full px-4 max-w-4xl">
         <div className="relative w-full">
-          {/* Navigation Arrows */}
           <button
             onClick={prevLetter}
             className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 md:-translate-x-12 bg-white p-4 rounded-full shadow-lg text-3xl z-10 hover:bg-yellow-100 transition-colors"
@@ -225,8 +244,7 @@ const App: React.FC = () => {
         <SparkyMascot message={message} isListening={isListening} />
       </main>
 
-      {/* Alphabet Scrollbar */}
-      <div className="fixed bottom-0 w-full bg-white/80 backdrop-blur-md p-4 flex gap-3 overflow-x-auto shadow-[0_-4px_10px_rgba(0,0,0,0.05)] scrollbar-hide">
+      <div className="fixed bottom-0 w-full bg-white/80 backdrop-blur-md p-4 flex gap-3 overflow-x-auto shadow-[0_-4px_10px_rgba(0,0,0,0.05)] scrollbar-hide z-50">
         {PHONICS_DATA.map((item, idx) => (
           <button
             key={item.letter}
