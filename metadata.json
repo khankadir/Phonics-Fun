@@ -1,0 +1,7 @@
+{
+  "name": "Phonics Fun with Sparky",
+  "description": "An interactive phonics learning tool for children aged 2-5, featuring AI-powered voice feedback to help master letter sounds.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

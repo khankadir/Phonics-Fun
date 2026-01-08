@@ -1,0 +1,31 @@
+
+import { PhonicData } from './types';
+
+export const PHONICS_DATA: PhonicData[] = [
+  { letter: 'A', phonic: 'ah', word: 'Apple', image: '🍎', color: 'bg-red-400' },
+  { letter: 'B', phonic: 'buh', word: 'Ball', image: '⚽', color: 'bg-blue-400' },
+  { letter: 'C', phonic: 'kuh', word: 'Cat', image: '🐱', color: 'bg-orange-400' },
+  { letter: 'D', phonic: 'duh', word: 'Dog', image: '🐶', color: 'bg-emerald-400' },
+  { letter: 'E', phonic: 'eh', word: 'Elephant', image: '🐘', color: 'bg-purple-400' },
+  { letter: 'F', phonic: 'fuh', word: 'Fish', image: '🐟', color: 'bg-cyan-400' },
+  { letter: 'G', phonic: 'guh', word: 'Goat', image: '🐐', color: 'bg-green-500' },
+  { letter: 'H', phonic: 'huh', word: 'Hat', image: '🎩', color: 'bg-yellow-500' },
+  { letter: 'I', phonic: 'ih', word: 'Igloo', image: '🏠', color: 'bg-indigo-400' },
+  { letter: 'J', phonic: 'juh', word: 'Jar', image: '🫙', color: 'bg-pink-400' },
+  { letter: 'K', phonic: 'kuh', word: 'Kite', image: '🪁', color: 'bg-red-500' },
+  { letter: 'L', phonic: 'luh', word: 'Lion', image: '🦁', color: 'bg-orange-500' },
+  { letter: 'M', phonic: 'muh', word: 'Monkey', image: '🐒', color: 'bg-blue-500' },
+  { letter: 'N', phonic: 'nuh', word: 'Nest', image: '🪹', color: 'bg-green-400' },
+  { letter: 'O', phonic: 'ah', word: 'Octopus', image: '🐙', color: 'bg-purple-500' },
+  { letter: 'P', phonic: 'puh', word: 'Panda', image: '🐼', color: 'bg-rose-400' },
+  { letter: 'Q', phonic: 'kwuh', word: 'Queen', image: '👸', color: 'bg-violet-400' },
+  { letter: 'R', phonic: 'ruh', word: 'Rabbit', image: '🐰', color: 'bg-red-300' },
+  { letter: 'S', phonic: 'suh', word: 'Sun', image: '☀️', color: 'bg-yellow-400' },
+  { letter: 'T', phonic: 'tuh', word: 'Tiger', image: '🐯', color: 'bg-orange-600' },
+  { letter: 'U', phonic: 'uh', word: 'Umbrella', image: '☂️', color: 'bg-sky-400' },
+  { letter: 'V', phonic: 'vuh', word: 'Van', image: '🚐', color: 'bg-slate-400' },
+  { letter: 'W', phonic: 'wuh', word: 'Watch', image: '⌚', color: 'bg-teal-400' },
+  { letter: 'X', phonic: 'ks', word: 'Xylophone', image: '🎹', color: 'bg-fuchsia-400' },
+  { letter: 'Y', phonic: 'yuh', word: 'Yo-yo', image: '🪀', color: 'bg-yellow-600' },
+  { letter: 'Z', phonic: 'zuh', word: 'Zebra', image: '🦓', color: 'bg-neutral-500' },
+];
